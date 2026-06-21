@@ -1,0 +1,69 @@
+// ms-auth/src/middlewares/error.middleware.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
+import { AppError } from '../helpers/appError';
+
+/**
+ * Middleware: Manejador Global de Errores (Error Catcher)
+ * Evita que la aplicación colapse centralizando las respuestas de error.
+ * Regla de oro: self-protection — nunca exponer detalles internos al cliente.
+ */
+export const errorHandler = (
+    err: unknown,
+    _req: Request,
+    res: Response,
+    _next: NextFunction,
+): void => {
+    // Self-protection: si el error NO es un AppError operacional conocido,
+    // retornamos 500 con mensaje genérico para no filtrar detalles internos.
+    if (!(err instanceof AppError)) {
+        logger.error(
+            { err },
+            '🚨 [Error Global Handler ms-auth] Error no operacional capturado',
+        );
+        res.status(500).json({
+            ok: false,
+            error: 'Error interno del servidor. Contacte al equipo de FocoCero.',
+        });
+        return;
+    }
+
+    // 1. Log interno del servidor (Para trazabilidad)
+    logger.error({ err }, `🚨 [Error Global Handler ms-auth]`);
+
+    let statusCode = err.statusCode || 500;
+    let message = err.message || 'Error interno del servidor. Contacte al equipo de FocoCero.';
+
+    // --- 🟢 EVALUACIÓN DE ERRORES FIREBASE ---
+    if (
+        err instanceof Object
+        && 'code' in err
+        && typeof (err as Record<string, unknown>).code === 'string'
+        && ((err as Record<string, unknown>).code as string).startsWith('auth/')
+    ) {
+        statusCode = 401;
+        const errorCode = (err as Record<string, unknown>).code as string;
+        switch (errorCode) {
+            case 'auth/id-token-expired':
+                message =
+                    'Tu sesión ha expirado por seguridad. Por favor, inicia sesión nuevamente.';
+                break;
+            case 'auth/argument-error':
+            case 'auth/invalid-id-token':
+                message = 'El token de acceso proporcionado está corrupto o es inválido.';
+                break;
+            case 'auth/user-not-found':
+                message =
+                    'La credencial vinculada a este token ya no existe en los registros de Google.';
+                break;
+            default:
+                message = 'Fallo en la validación de identidad. Verifica tus credenciales.';
+        }
+    }
+
+    res.status(statusCode).json({
+        ok: false,
+        error: message,
+    });
+};
