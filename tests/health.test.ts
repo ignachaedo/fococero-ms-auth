@@ -1,3 +1,9 @@
+/**
+ * Pruebas unitarias para el endpoint de Salud (Health Check) de ms-auth
+ * 
+ * @module health
+ */
+
 import { describe, it, expect } from '@jest/globals'; // <- Esta línea elimina los errores de VS Code
 import request from 'supertest';
 import express from 'express';
