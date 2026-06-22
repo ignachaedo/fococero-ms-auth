@@ -1,4 +1,9 @@
-// ms-auth/src/middlewares/error.middleware.ts
+/**
+ * @fileoverview Manejador global de errores para ms-auth.
+ * Centraliza la captura de excepciones, traduce errores de Firebase Auth
+ * (tokens expirados, inválidos, usuario no encontrado) y retorna respuestas
+ * estandarizadas sin exponer detalles internos del servidor.
+ */
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
@@ -8,6 +13,14 @@ import { AppError } from '../helpers/appError';
  * Middleware: Manejador Global de Errores (Error Catcher)
  * Evita que la aplicación colapse centralizando las respuestas de error.
  * Regla de oro: self-protection — nunca exponer detalles internos al cliente.
+ *
+ * @description Si el error no es un AppError operacional, retorna 500 genérico.
+ * Para errores de Firebase con código 'auth/', traduce a mensajes legibles.
+ *
+ * @param err - Error capturado (puede ser AppError, Error de Firebase, etc.)
+ * @param _req - Objeto Request de Express (no utilizado)
+ * @param res - Objeto Response de Express
+ * @param _next - Función NextFunction de Express (no utilizada)
  */
 export const errorHandler = (
     err: unknown,

@@ -1,4 +1,9 @@
-// ms-auth/src/services/auth.service.ts
+/**
+ * @fileoverview Servicio de autenticación y gestión de usuarios (Identity Provider).
+ * Coordina la validación de tokens de Firebase con la persistencia en PostgreSQL.
+ * Implementa registro de invitados, registro completo con Google, upgrade de cuentas,
+ * administración de roles, perfiles de brigadista, y sincronización con Firebase Custom Claims.
+ */
 
 import { UserRepository } from '../repositories/user.repository';
 import { AuthValidator, GuestRegisterDTO, FullRegisterDTO, LoginDTO, GoogleAuthDTO } from '../validators/auth.validator';
@@ -21,7 +26,20 @@ export class AuthService {
     // ============================================================================
 
     /**
-     * Autentica un usuario por RUT y contraseña (MVP plaintext).
+     * Autentica un usuario por RUT y contraseña.
+     *
+     * @description Valida credenciales contra la base de datos usando bcrypt,
+     * verifica el estado activo del usuario, sincroniza custom claims en Firebase,
+     * y genera un Firebase Custom Token para establecer sesión en el frontend.
+     *
+     * @param data - DTO con RUT y contraseña del usuario
+     * @param data.rut - RUT del usuario (formato chileno)
+     * @param data.password - Contraseña en texto plano
+     * @returns Objeto con datos del usuario y Firebase Custom Token
+     * @throws AppError(400) - Si faltan credenciales o RUT sin Firebase UID
+     * @throws AppError(401) - Si credenciales inválidas o usuario no encontrado
+     * @throws AppError(403) - Si cuenta suspendida o bloqueada
+     * @throws AppError(500) - Error de base de datos o Firebase
      */
     static async loginUser(data: LoginDTO) {
         const validation = AuthValidator.validateLogin(data);
@@ -82,7 +100,16 @@ export class AuthService {
 
     /**
      * Registra un usuario invitado (RUT y datos básicos).
-     * Si el RUT ya existe, retorna el usuario actual sin crear duplicados.
+     *
+     * @description Crea un nuevo usuario con rol INVITADO. Si el RUT ya existe,
+     * vincula el firebase_uid si el usuario existente aún no tiene uno.
+     * Si se proporciona contraseña, la hashea con bcrypt antes de persistir.
+     * Genera Firebase Custom Token si el usuario tiene firebase_uid.
+     *
+     * @param data - DTO con datos del invitado (RUT, nombre, apellido, teléfono, password opcional, firebase_uid opcional)
+     * @returns Objeto con indicador isNew, datos del usuario y firebaseToken opcional
+     * @throws AppError(400) - Si datos de invitado inválidos según validador
+     * @throws AppError(500) - Error de base de datos o Firebase
      */
     static async registerGuestUser(data: GuestRegisterDTO) {
         const validation = AuthValidator.validateGuest(data);
@@ -156,6 +183,17 @@ export class AuthService {
 
     /**
      * Upgrade de cuenta guest: establece una contraseña para permitir login RUT+password.
+     *
+     * @description Permite a un usuario invitado establecer una contraseña.
+     * Valida que la contraseña tenga al menos 6 caracteres y que el usuario
+     * exista y no tenga ya una contraseña establecida.
+     *
+     * @param firebase_uid - Identificador único de Firebase del usuario
+     * @param password - Nueva contraseña en texto plano (mínimo 6 caracteres)
+     * @returns Usuario actualizado con la nueva contraseña hasheada
+     * @throws AppError(400) - Si contraseña muy corta o usuario ya tiene contraseña
+     * @throws AppError(404) - Si usuario no encontrado
+     * @throws AppError(500) - Error de base de datos
      */
     static async upgradeAccount(firebase_uid: string, password: string) {
         if (!password || password.length < 6) {
@@ -195,7 +233,16 @@ export class AuthService {
 
     /**
      * Convierte un usuario invitado a ciudadano completo.
-     * Establece contraseña y cambia rol de invitado a usuario.
+     *
+     * @description Establece una contraseña y cambia el rol de INVITADO a USUARIO.
+     * Solo permite la conversión si el rol actual del usuario es INVITADO.
+     *
+     * @param firebase_uid - Identificador único de Firebase del usuario
+     * @param password - Nueva contraseña en texto plano (mínimo 6 caracteres)
+     * @returns Usuario actualizado con rol USUARIO y contraseña hasheada
+     * @throws AppError(400) - Si contraseña muy corta o el usuario no es invitado
+     * @throws AppError(404) - Si usuario no encontrado
+     * @throws AppError(500) - Error de base de datos
      */
     static async convertGuestToCitizen(firebase_uid: string, password: string) {
         if (!password || password.length < 6) {
@@ -239,7 +286,17 @@ export class AuthService {
 
     /**
      * Vincula una cuenta de Google (Firebase) con un perfil de usuario real.
-     * Valida la firma criptográfica del token antes de proceder.
+     *
+     * @description Valida criptográficamente el token de Firebase, verifica que
+     * no exista colisión de identidad (RUT o Firebase UID duplicados), y crea
+     * un usuario completo con rol USUARIO. Establece custom claims en Firebase.
+     *
+     * @param data - DTO con token de Firebase, RUT, nombre, apellido, teléfono
+     * @returns Objeto con el usuario recién creado
+     * @throws AppError(400) - Si datos de registro inválidos
+     * @throws AppError(401) - Si token de Google expirado o inválido
+     * @throws AppError(409) - Si el RUT o Firebase UID ya están registrados
+     * @throws AppError(500) - Error de base de datos o Firebase
      */
     static async registerFullUser(data: FullRegisterDTO) {
         const validation = AuthValidator.validateFullRegister(data);
@@ -296,6 +353,22 @@ export class AuthService {
         }
     }
 
+    /**
+     * Autentica o registra un usuario mediante Google Sign-In.
+     *
+     * @description Valida el token de Firebase, busca al usuario por Firebase UID
+     * o email. Si existe, vincula firebase_uid si falta y valida estado activo.
+     * Si no existe, crea un nuevo usuario con RUT placeholder (GG + UID),
+     * rol USUARIO y datos extraídos del token de Google.
+     *
+     * @param data - DTO con el token de autenticación de Firebase
+     * @param data.token - Token ID de Firebase obtenido del Google Sign-In
+     * @returns Objeto con datos del usuario (existente o recién creado)
+     * @throws AppError(400) - Si token inválido según validador
+     * @throws AppError(401) - Si sesión de Google expirada o inválida
+     * @throws AppError(403) - Si cuenta suspendida o bloqueada
+     * @throws AppError(500) - Error de base de datos o Firebase
+     */
     static async loginWithGoogle(data: GoogleAuthDTO) {
         if (process.env.NODE_ENV !== 'production') {
             console.log('[GoogleAuth] loginWithGoogle llamado. Token presente:', !!data.token, 'Longitud:', data.token?.length);
@@ -379,6 +452,14 @@ export class AuthService {
     // 🔵 SECCIÓN: CONSULTAS Y PERFILES
     // ============================================================================
 
+    /**
+     * Obtiene el perfil completo de un usuario por su ID numérico.
+     *
+     * @param userId - ID numérico del usuario en la base de datos
+     * @returns Datos completos del usuario
+     * @throws AppError(404) - Si el usuario no existe
+     * @throws AppError(500) - Error de base de datos
+     */
     static async getUserProfile(userId: number) {
         let user;
         try {
@@ -392,6 +473,14 @@ export class AuthService {
         return user;
     }
 
+    /**
+     * Obtiene estadísticas resumidas de un usuario.
+     *
+     * @param userId - ID numérico del usuario
+     * @returns Objeto con totalReportes, alertasActivas, ultimaActividad y reputación
+     * @throws AppError(404) - Si el usuario no existe
+     * @throws AppError(500) - Error de base de datos
+     */
     static async getUserStats(userId: number) {
         let user;
         try {
@@ -411,6 +500,12 @@ export class AuthService {
         };
     }
 
+    /**
+     * Obtiene todos los usuarios del sistema (solo para administradores).
+     *
+     * @returns Lista completa de usuarios ordenados por fecha de creación descendente
+     * @throws AppError(500) - Error de base de datos
+     */
     static async getAllUsersForAdmin() {
         try {
             return await UserRepository.findAll();
@@ -424,7 +519,18 @@ export class AuthService {
     // ============================================================================
 
     /**
-     * Actualiza el perfil permitiendo solo cambios en campos no sensibles.
+     * Actualiza el perfil del usuario permitiendo solo cambios en campos no sensibles.
+     *
+     * @description Bloquea cambios en rol, estado y firebase_uid por seguridad.
+     * Si se cambia el RUT, verifica que no pertenezca a otro usuario.
+     * Solo permite actualizar: rut, nombre, apellido, email, teléfono.
+     *
+     * @param userId - ID numérico del usuario a actualizar
+     * @param updateData - Objeto parcial con los campos a modificar
+     * @returns Usuario actualizado
+     * @throws AppError(404) - Si usuario no encontrado
+     * @throws AppError(409) - Si el nuevo RUT ya pertenece a otro usuario
+     * @throws AppError(500) - Error de base de datos
      */
     static async updateUserProfile(userId: number, updateData: Partial<Usuario>) {
         // Bloqueo de seguridad: No se puede cambiar rol o estado por esta vía
@@ -472,6 +578,18 @@ export class AuthService {
         return updated;
     }
 
+    /**
+     * Cambia el rol de un usuario (solo administradores).
+     *
+     * @description Si el nuevo rol es BRIGADISTA, crea automáticamente un perfil
+     * de brigadista si no existe uno asociado al usuario.
+     *
+     * @param userId - ID numérico del usuario
+     * @param newRole - Nuevo rol del usuario (enum UserRole)
+     * @returns Usuario actualizado con el nuevo rol
+     * @throws AppError(400) - Si el rol especificado no existe en el sistema
+     * @throws AppError(500) - Error de base de datos
+     */
     static async changeUserRole(userId: number, newRole: UserRole) {
         if (!Object.values(UserRole).includes(newRole)) {
             throw new AppError('El rol especificado no existe en el sistema.', 400);
@@ -493,6 +611,15 @@ export class AuthService {
         }
     }
 
+    /**
+     * Cambia el estado de un usuario (solo administradores).
+     *
+     * @param userId - ID numérico del usuario
+     * @param newStatus - Nuevo estado del usuario (enum UserStatus: ACTIVO, SUSPENDIDO, BLOQUEADO)
+     * @returns Usuario actualizado con el nuevo estado
+     * @throws AppError(400) - Si el estado especificado es inválido
+     * @throws AppError(500) - Error de base de datos
+     */
     static async updateUserStatus(userId: number, newStatus: UserStatus) {
         if (!Object.values(UserStatus).includes(newStatus)) {
             throw new AppError('El estado especificado es inválido.', 400);
@@ -506,6 +633,14 @@ export class AuthService {
 
     /**
      * Sincroniza el token de Firebase Cloud Messaging para notificaciones push.
+     *
+     * @description Actualiza el token FCM del usuario para permitir el envío
+     * de notificaciones push desde los servidores de Firebase.
+     *
+     * @param userId - ID numérico del usuario
+     * @param fcmToken - Token de Firebase Cloud Messaging (mínimo 10 caracteres)
+     * @throws AppError(400) - Si el token FCM es inválido o muy corto
+     * @throws AppError(500) - Error de base de datos
      */
     static async syncFcmToken(userId: number, fcmToken: string) {
         if (!fcmToken || fcmToken.trim().length < 10) {
@@ -522,6 +657,14 @@ export class AuthService {
     // 🔴 SECCIÓN: ELIMINACIÓN
     // ============================================================================
 
+    /**
+     * Elimina físicamente un usuario del sistema (solo administradores).
+     *
+     * @param userId - ID numérico del usuario a eliminar
+     * @returns Resultado de la operación de eliminación
+     * @throws AppError(404) - Si el usuario no existe
+     * @throws AppError(500) - Error de base de datos
+     */
     static async terminateUser(userId: number) {
         let user;
         try {
@@ -544,12 +687,32 @@ export class AuthService {
     // 🟠 SECCIÓN: PERFIL BRIGADISTA
     // ============================================================================
 
+    /**
+     * Obtiene el perfil de brigadista asociado a un usuario.
+     *
+     * @param userId - ID numérico del usuario
+     * @returns Usuario con su perfil de brigadista (o null si no tiene)
+     * @throws AppError(404) - Si el usuario no existe
+     */
     static async getPerfilBrigadista(userId: number): Promise<UsuarioWithPerfil> {
         const user = await this.getUserProfile(userId); // reuse
         const perfil = await PerfilBrigadistaRepository.findByUsuarioId(userId);
         return { ...user, perfil_brigadista: perfil || null };
     }
 
+    /**
+     * Actualiza el perfil de brigadista de un usuario.
+     *
+     * @description Solo permite actualizar campos específicos del perfil:
+     * organismo, rango, zona_asignada, numero_placa, fecha_ingreso.
+     * Requiere que al menos un campo válido sea proporcionado.
+     *
+     * @param userId - ID numérico del usuario
+     * @param updateData - Objeto parcial con campos del perfil a actualizar
+     * @returns Usuario con el perfil de brigadista actualizado
+     * @throws AppError(400) - Si no se proporcionaron campos válidos
+     * @throws AppError(500) - Error al actualizar el perfil
+     */
     static async updatePerfilBrigadista(userId: number, updateData: Partial<PerfilBrigadista>): Promise<UsuarioWithPerfil> {
         const user = await this.getUserProfile(userId);
 
@@ -574,6 +737,19 @@ export class AuthService {
         return { ...user, perfil_brigadista: updated };
     }
 
+    /**
+     * Crea un perfil de brigadista para un usuario (solo administradores).
+     *
+     * @description Crea el perfil con valores por defecto y cambia el rol del
+     * usuario a BRIGADISTA si aún no lo tiene. Verifica que el usuario no tenga
+     * ya un perfil de brigadista existente.
+     *
+     * @param userId - ID numérico del usuario
+     * @param perfilData - Datos parciales del perfil (organismo, rango, zona_asignada, etc.)
+     * @returns Usuario con el nuevo perfil de brigadista y rol actualizado
+     * @throws AppError(409) - Si el usuario ya tiene un perfil de brigadista
+     * @throws AppError(500) - Error de base de datos
+     */
     static async adminCreateBrigadista(userId: number, perfilData: Partial<PerfilBrigadista>): Promise<UsuarioWithPerfil> {
         const user = await this.getUserProfile(userId);
 

@@ -1,14 +1,31 @@
-// ms-auth/src/middlewares/auth.middleware.ts
+/**
+ * @fileoverview Middleware de autenticación operativa para ms-auth.
+ * Valida la firma criptográfica del token JWT de Firebase, recupera el perfil
+ * completo del usuario desde PostgreSQL, verifica su estado, y lo inyecta en req.user.
+ */
 
 import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
 import { UserRepository } from '../repositories/user.repository';
-import { UserStatus } from '../models/user.enum'; // Asegúrate de que esta ruta sea correcta
+import { UserStatus } from '../models/user.enum';
 
 /**
  * Middleware: Autenticación Operativa (Identity Provider)
  * Intercepta peticiones privadas, valida la firma criptográfica de Google y
  * recupera el perfil completo del usuario de la base de datos (PostgreSQL).
+ *
+ * @description Escudo perimetral en 5 capas:
+ * 1. Rechazo temprano si no hay token Bearer
+ * 2. Verificación criptográfica con Firebase Admin
+ * 3. Búsqueda del usuario en PostgreSQL por Firebase UID
+ * 4. Verificación del ciclo de vida del usuario (estado ACTIVO)
+ * 5. Inyección tipada del objeto Usuario completo en req.user
+ *
+ * @param req - Objeto Request de Express
+ * @param res - Objeto Response de Express
+ * @param next - Función NextFunction de Express
+ * @returns Promise<void> - No retorna valor, pasa al siguiente middleware o responde error
+ * @throws Error - Errores de Firebase (token expirado/inválido) se delegan al error middleware
  */
 export const validateFirebaseToken = async (
     req: Request,

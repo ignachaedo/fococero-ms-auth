@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Repositorio de perfiles de brigadista para ms-auth.
+ * Encapsula el acceso a datos de la tabla `perfiles_brigadista` en PostgreSQL,
+ * con operaciones CRUD y actualización dinámica con whitelist de columnas.
+ */
+
 import { pool } from '../config/database';
 import { PerfilBrigadista } from '../models/perfil-brigadista.model';
 
@@ -14,6 +20,9 @@ export class PerfilBrigadistaRepository {
 
     /**
      * Busca el perfil de brigadista por ID de usuario (relación 1:1).
+     *
+     * @param usuarioId - ID numérico del usuario
+     * @returns Perfil de brigadista encontrado o null si no existe
      */
     static async findByUsuarioId(usuarioId: number): Promise<PerfilBrigadista | null> {
         const query = 'SELECT * FROM perfiles_brigadista WHERE usuario_id = $1';
@@ -23,6 +32,9 @@ export class PerfilBrigadistaRepository {
 
     /**
      * Crea un nuevo perfil de brigadista.
+     *
+     * @param data - Datos parciales del perfil (usuario_id, organismo, rango, etc.)
+     * @returns Perfil de brigadista recién creado
      */
     static async create(data: Partial<PerfilBrigadista>): Promise<PerfilBrigadista> {
         const query = `
@@ -42,9 +54,14 @@ export class PerfilBrigadistaRepository {
     }
 
     /**
-     * ACTUALIZACIÓN DINÁMICA:
-     * Permite actualizar cualquier campo del perfil de brigadista sin necesidad
-     * de crear un método por cada campo. La actualización se realiza por usuario_id.
+     * Actualización dinámica del perfil de brigadista por usuario_id.
+     *
+     * @description Usa una lista blanca (whitelist) de columnas permitidas para
+     * prevenir SQL injection. Solo actualiza campos del set ALLOWED_UPDATE_COLUMNS.
+     *
+     * @param usuarioId - ID numérico del usuario (clave foránea)
+     * @param data - Objeto parcial con campos del perfil a actualizar
+     * @returns Perfil actualizado o null si no hay campos válidos
      */
     static async update(usuarioId: number, data: Partial<PerfilBrigadista>): Promise<PerfilBrigadista | null> {
         const entries = Object.entries(data)
