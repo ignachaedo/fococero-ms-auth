@@ -7,6 +7,17 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 
 // Mocks before imports
+jest.mock('../src/config/firebase', () => ({
+  __esModule: true,
+  default: {
+    auth: () => ({
+      verifyIdToken: jest.fn(),
+      createCustomToken: jest.fn(),
+      setCustomUserClaims: jest.fn(),
+    }),
+  },
+}));
+
 jest.mock('../src/services/auth.service');
 
 import { AuthController } from '../src/controllers/auth.controller';
