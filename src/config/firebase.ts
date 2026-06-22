@@ -29,6 +29,10 @@ const initializeFirebase = () => {
         }
 
         // En ms-auth, si Firebase falla, el servicio entero es inútil. Fallo determinista.
+        // En entorno de test lanzamos error en vez de matar el proceso.
+        if (process.env.NODE_ENV === 'test') {
+            throw error instanceof Error ? error : new Error('Firebase initialization failed');
+        }
         process.exit(1);
     }
 };
