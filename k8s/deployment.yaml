@@ -29,14 +29,11 @@ spec:
           ports:
             - containerPort: 3001
               protocol: TCP
-          envFrom:
-            - secretRef:
-                name: fococero-env
           env:
             - name: PORT
               value: "3001"
-            - name: DB_NAME
-              value: "auth_db"
+            - name: AUTH_SERVICE_URL
+              value: "http://ms-auth:3001"
           resources:
             requests:
               cpu: "100m"
