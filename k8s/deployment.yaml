@@ -29,50 +29,48 @@ spec:
                   ports:
                       - containerPort: 3001
                         protocol: TCP
-                  env:
-                      - name: PORT
-                        value: '3001'
-                      - name: DB_USER
-                        valueFrom: { secretKeyRef: { name: ms-auth-secrets, key: DB_USER } }
-                      - name: DB_PASSWORD
-                        valueFrom: { secretKeyRef: { name: ms-auth-secrets, key: DB_PASSWORD } }
-                      - name: DB_HOST
-                        value: 'db-fococero'
-                      - name: DB_NAME
-                        value: 'auth_db'
-                      - name: FIREBASE_PROJECT_ID
-                        valueFrom:
-                            { secretKeyRef: { name: firebase-secret, key: FIREBASE_PROJECT_ID } }
-                      - name: FIREBASE_CLIENT_EMAIL
-                        valueFrom:
-                            { secretKeyRef: { name: firebase-secret, key: FIREBASE_CLIENT_EMAIL } }
-                      - name: FIREBASE_PRIVATE_KEY
-                        valueFrom:
-                            { secretKeyRef: { name: firebase-secret, key: FIREBASE_PRIVATE_KEY } }
-                      - name: INTERNAL_SECRET_TOKEN
-                        valueFrom:
-                            { secretKeyRef: { name: ms-auth-secrets, key: INTERNAL_SECRET_TOKEN } }
-                  resources:
-                      requests:
-                          cpu: '100m'
-                          memory: '128Mi'
-                      limits:
-                          cpu: '500m'
-                          memory: '256Mi'
-                  livenessProbe:
-                      httpGet:
-                          path: /health
-                          port: 3001
-                      initialDelaySeconds: 10
-                      periodSeconds: 15
-                      timeoutSeconds: 5
-                      failureThreshold: 3
-                  readinessProbe:
-                      httpGet:
-                          path: /health
-                          port: 3001
-                      initialDelaySeconds: 5
-                      periodSeconds: 10
-                      timeoutSeconds: 3
-                      failureThreshold: 2
-            terminationGracePeriodSeconds: 30
+            env:
+                - name: PORT
+                  value: '3001'
+                - name: DB_USER
+                  valueFrom: { secretKeyRef: { name: ms-auth-secrets, key: DB_USER } }
+                - name: DB_PASSWORD
+                  valueFrom: { secretKeyRef: { name: ms-auth-secrets, key: DB_PASSWORD } }
+                - name: DB_HOST
+                  value: 'db-fococero'
+                - name: DB_PORT
+                  value: '5432'
+                - name: DB_NAME
+                  value: 'auth_db'
+                - name: FIREBASE_PROJECT_ID
+                  valueFrom: { secretKeyRef: { name: firebase-secret, key: FIREBASE_PROJECT_ID } }
+                - name: FIREBASE_CLIENT_EMAIL
+                  valueFrom: { secretKeyRef: { name: firebase-secret, key: FIREBASE_CLIENT_EMAIL } }
+                - name: FIREBASE_PRIVATE_KEY
+                  valueFrom: { secretKeyRef: { name: firebase-secret, key: FIREBASE_PRIVATE_KEY } }
+                - name: INTERNAL_SECRET_TOKEN
+                  valueFrom: { secretKeyRef: { name: ms-auth-secrets, key: INTERNAL_SECRET_TOKEN } }
+            resources:
+                requests:
+                    cpu: '100m'
+                    memory: '128Mi'
+                limits:
+                    cpu: '500m'
+                    memory: '256Mi'
+            livenessProbe:
+                httpGet:
+                    path: /health
+                    port: 3001
+                initialDelaySeconds: 10
+                periodSeconds: 15
+                timeoutSeconds: 5
+                failureThreshold: 3
+            readinessProbe:
+                httpGet:
+                    path: /health
+                    port: 3001
+                initialDelaySeconds: 5
+                periodSeconds: 10
+                timeoutSeconds: 3
+                failureThreshold: 2
+        terminationGracePeriodSeconds: 30
