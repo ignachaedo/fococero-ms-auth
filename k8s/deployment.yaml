@@ -56,6 +56,8 @@ spec:
                       - name: INTERNAL_SECRET_TOKEN
                         valueFrom:
                             { secretKeyRef: { name: ms-auth-secrets, key: INTERNAL_SECRET_TOKEN } }
+                      - name: EUREKA_HOST
+                        value: "eureka-server"
                   resources:
                       requests:
                           cpu: '100m'
