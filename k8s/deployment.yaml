@@ -56,8 +56,10 @@ spec:
                       - name: INTERNAL_SECRET_TOKEN
                         valueFrom:
                             { secretKeyRef: { name: ms-auth-secrets, key: INTERNAL_SECRET_TOKEN } }
-                      - name: EUREKA_HOST
-                        value: "eureka-server"
+                      - name: EUREKA_CLIENT_REGISTERWITHEUREKA
+                        value: 'false'
+                      - name: EUREKA_CLIENT_FETCHREGISTRY
+                        value: 'false'
                   resources:
                       requests:
                           cpu: '100m'
