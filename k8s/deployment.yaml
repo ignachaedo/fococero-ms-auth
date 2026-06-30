@@ -22,10 +22,10 @@ spec:
                 app: ms-auth
                 tier: backend
         spec:
-            terminationGracePeriodSeconds: 30 # <-- Ahora está donde corresponde
+            terminationGracePeriodSeconds: 30
             containers:
                 - name: ms-auth
-                  image: 711147367899.dkr.ecr.us-east-1.amazonaws.com/fococero-ms-auth:${IMAGE_TAG}
+                  image: 486507079259.dkr.ecr.us-east-1.amazonaws.com/fococero-ms-auth:${IMAGE_TAG}
                   imagePullPolicy: Always
                   ports:
                       - containerPort: 3001
