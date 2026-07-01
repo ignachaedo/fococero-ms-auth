@@ -31,10 +31,5 @@ export const envs = {
         .get('FIREBASE_PRIVATE_KEY')
         .required()
         .asString()
-        .replace(/\\n/g, '\n')
-        .replace(/"/g, '')
-        .trim(),
-
-    // Secreto interno para comunicación entre microservicios
-    INTERNAL_SECRET_TOKEN: env.get('INTERNAL_SECRET_TOKEN').required().asString(),
+        .replace(/\\n/g, '\n'),
 };

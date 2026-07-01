@@ -1,31 +1,14 @@
-/**
- * @fileoverview Middleware de autenticación operativa para ms-auth.
- * Valida la firma criptográfica del token JWT de Firebase, recupera el perfil
- * completo del usuario desde PostgreSQL, verifica su estado, y lo inyecta en req.user.
- */
+// ms-auth/src/middlewares/auth.middleware.ts
 
 import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
 import { UserRepository } from '../repositories/user.repository';
-import { UserStatus } from '../models/user.enum';
+import { UserStatus } from '../models/user.enum'; // Asegúrate de que esta ruta sea correcta
 
 /**
  * Middleware: Autenticación Operativa (Identity Provider)
  * Intercepta peticiones privadas, valida la firma criptográfica de Google y
  * recupera el perfil completo del usuario de la base de datos (PostgreSQL).
- *
- * @description Escudo perimetral en 5 capas:
- * 1. Rechazo temprano si no hay token Bearer
- * 2. Verificación criptográfica con Firebase Admin
- * 3. Búsqueda del usuario en PostgreSQL por Firebase UID
- * 4. Verificación del ciclo de vida del usuario (estado ACTIVO)
- * 5. Inyección tipada del objeto Usuario completo en req.user
- *
- * @param req - Objeto Request de Express
- * @param res - Objeto Response de Express
- * @param next - Función NextFunction de Express
- * @returns Promise<void> - No retorna valor, pasa al siguiente middleware o responde error
- * @throws Error - Errores de Firebase (token expirado/inválido) se delegan al error middleware
  */
 export const validateFirebaseToken = async (
     req: Request,
@@ -38,7 +21,7 @@ export const validateFirebaseToken = async (
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             res.status(401).json({
                 ok: false,
-                error: 'Acceso denegado: Token Bearer no proporcionado.',
+                msg: 'Acceso denegado: Token Bearer no proporcionado.',
             });
             return;
         }
@@ -54,7 +37,7 @@ export const validateFirebaseToken = async (
         if (!user) {
             res.status(403).json({
                 ok: false,
-                error: 'Identidad de Google válida, pero el usuario no está registrado en el ecosistema FocoCero.',
+                msg: 'Identidad de Google válida, pero el usuario no está registrado en el ecosistema FocoCero.',
             });
             return;
         }
@@ -63,7 +46,7 @@ export const validateFirebaseToken = async (
         if (user.estado !== UserStatus.ACTIVO) {
             res.status(403).json({
                 ok: false,
-                error: `Cuenta inhabilitada. Estado actual: ${user.estado}. Contacte a soporte técnico.`,
+                msg: `Cuenta inhabilitada. Estado actual: ${user.estado}. Contacte a soporte técnico.`,
             });
             return;
         }

@@ -1,26 +1,17 @@
-/**
- * @fileoverview Manejador global de errores para ms-auth.
- * Centraliza la captura de excepciones, traduce errores de Firebase Auth
- * (tokens expirados, inválidos, usuario no encontrado) y retorna respuestas
- * estandarizadas sin exponer detalles internos del servidor.
- */
+// ms-auth/src/middlewares/error.middleware.ts
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
-import { AppError } from '../helpers/appError';
+
+// Interfaz local para castear los metadatos de error sin usar 'any'
+interface AppError extends Error {
+    statusCode?: number;
+    code?: string;
+}
 
 /**
  * Middleware: Manejador Global de Errores (Error Catcher)
  * Evita que la aplicación colapse centralizando las respuestas de error.
- * Regla de oro: self-protection — nunca exponer detalles internos al cliente.
- *
- * @description Si el error no es un AppError operacional, retorna 500 genérico.
- * Para errores de Firebase con código 'auth/', traduce a mensajes legibles.
- *
- * @param err - Error capturado (puede ser AppError, Error de Firebase, etc.)
- * @param _req - Objeto Request de Express (no utilizado)
- * @param res - Objeto Response de Express
- * @param _next - Función NextFunction de Express (no utilizada)
  */
 export const errorHandler = (
     err: unknown,
@@ -28,36 +19,19 @@ export const errorHandler = (
     res: Response,
     _next: NextFunction,
 ): void => {
-    // Self-protection: si el error NO es un AppError operacional conocido,
-    // retornamos 500 con mensaje genérico para no filtrar detalles internos.
-    if (!(err instanceof AppError)) {
-        logger.error(
-            { err },
-            '🚨 [Error Global Handler ms-auth] Error no operacional capturado',
-        );
-        res.status(500).json({
-            ok: false,
-            error: 'Error interno del servidor. Contacte al equipo de FocoCero.',
-        });
-        return;
-    }
+    // Casteo seguro de la excepción
+    const error = err as AppError;
 
     // 1. Log interno del servidor (Para trazabilidad)
-    logger.error({ err }, `🚨 [Error Global Handler ms-auth]`);
+    logger.error({ err: error }, `🚨 [Error Global Handler ms-auth]`);
 
-    let statusCode = err.statusCode || 500;
-    let message = err.message || 'Error interno del servidor. Contacte al equipo de FocoCero.';
+    let statusCode = error.statusCode || 500;
+    let message = error.message || 'Error interno del servidor. Contacte al equipo de FocoCero.';
 
     // --- 🟢 EVALUACIÓN DE ERRORES FIREBASE ---
-    if (
-        err instanceof Object
-        && 'code' in err
-        && typeof (err as Record<string, unknown>).code === 'string'
-        && ((err as Record<string, unknown>).code as string).startsWith('auth/')
-    ) {
+    if (error.code && error.code.startsWith('auth/')) {
         statusCode = 401;
-        const errorCode = (err as Record<string, unknown>).code as string;
-        switch (errorCode) {
+        switch (error.code) {
             case 'auth/id-token-expired':
                 message =
                     'Tu sesión ha expirado por seguridad. Por favor, inicia sesión nuevamente.';
@@ -73,6 +47,18 @@ export const errorHandler = (
             default:
                 message = 'Fallo en la validación de identidad. Verifica tus credenciales.';
         }
+    }
+
+    // --- 🔵 EVALUACIÓN DE ERRORES POSTGRESQL (pg) ---
+    if (error.code === '23505') {
+        statusCode = 409; // 409 Conflict
+        message =
+            'Conflicto de datos: El registro (RUT o Email) que intentas ingresar ya existe en el sistema.';
+    }
+
+    if (error.code === '22P02') {
+        statusCode = 400; // 400 Bad Request
+        message = 'Formato de datos incorrecto en la base de datos (Ej: UUID inválido).';
     }
 
     res.status(statusCode).json({

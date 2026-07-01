@@ -11,10 +11,8 @@ const router = Router();
 // ============================================================================
 // Rutas de entrada al sistema FocoCero. No requieren token previo.
 
-router.post('/login', AuthController.login);
 router.post('/register-guest', AuthController.registerGuest);
 router.post('/register-full', AuthController.registerFull);
-router.post('/google', AuthController.loginWithGoogle);
 
 // ============================================================================
 // 🔒 ZONA PRIVADA (Requiere Identidad Verificada)
@@ -23,20 +21,10 @@ router.post('/google', AuthController.loginWithGoogle);
 // línea requerirán obligatoriamente un token de Firebase válido.
 router.use(validateFirebaseToken);
 
-// --- Upgrade de cuenta: requiere autenticación previa ---
-router.post('/upgrade-account', AuthController.upgradeAccount);
-
 // --- Gestión de Mi Perfil ---
 router.get('/me', AuthController.getProfile);
 router.patch('/me', AuthController.updateProfile);
 router.patch('/me/fcm-token', AuthController.syncFcmToken);
-router.get('/me/stats', AuthController.getMyStats);
-router.patch('/me/convertir', AuthController.convertToCiudadano);
-router.get('/me/notificaciones', AuthController.getMyNotifications);
-
-// --- Perfil Brigadista (requiere autenticación, cualquier rol) ---
-router.get('/me/perfil-brigadista', AuthController.getMyPerfilBrigadista);
-router.patch('/me/perfil-brigadista', AuthController.updateMyPerfilBrigadista);
 
 // ============================================================================
 // 🔴 ZONA DE ALTA SEGURIDAD (Administración FocoCero)
@@ -51,16 +39,5 @@ router.get('/users', adminGuard, AuthController.getAllUsers);
 router.patch('/users/:id/role', adminGuard, AuthController.changeRole);
 router.patch('/users/:id/status', adminGuard, AuthController.changeStatus);
 router.delete('/users/:id', adminGuard, AuthController.deleteUser);
-router.post('/admin/brigadistas/:id', adminGuard, AuthController.adminCreateBrigadista);
-
-// ============================================================================
-// 🚫 CATCH-ALL: Rutas no encontradas (devuelve 404, no 401 del guard)
-// ============================================================================
-router.all('*path', (req, res) => {
-  res.status(404).json({
-    ok: false,
-    error: `Ruta no encontrada: ${req.method} ${req.originalUrl}`,
-  });
-});
 
 export default router;

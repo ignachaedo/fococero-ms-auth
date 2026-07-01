@@ -11,7 +11,6 @@ import { pool } from './config/database';
 import authRoutes from './routes/auth.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { metricsMiddleware, metricsHandler } from './middlewares/metrics.middleware';
-import { internalAuthMiddleware } from './middlewares/internalAuth.middleware';
 import { logger } from './config/logger';
 
 import { initEurekaClient } from './config/eureka.client';
@@ -36,15 +35,6 @@ app.use(
 app.use(cors({ origin: envs.API_GATEWAY_URL || 'http://localhost:3000' }));
 
 app.use(express.json());
-
-// Normalización de path: colapsa dobles slashes para compatibilidad con proxies intermedios
-app.use((req, _res, next) => {
-  if (req.url.includes('//')) {
-    req.url = req.url.replace(/\/{2,}/g, '/');
-  }
-  next();
-});
-
 app.use(morgan('dev'));
 
 // 📊 Monitoreo de métricas (Prometheus)
@@ -67,17 +57,7 @@ app.get('/metrics', metricsHandler);
 // 📖 Ruta para la documentación interactiva de la API
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// 🚦 Rate limiter y rutas de autenticación (públicas + privadas con Firebase)
 app.use('/', apiLimiter, authRoutes);
-
-// ✅ Health endpoint del microservicio
-app.get('/api/auth/health', (_req, res) => {
-    res.json({ status: 'UP', service: 'ms-auth', timestamp: new Date().toISOString() });
-});
-
-// 🔐 Seguridad interna: solo afecta rutas definidas DESPUÉS (rutas internas futuras)
-app.use(internalAuthMiddleware);
-
 app.use(errorHandler);
 
 // --- 🚀 INICIO DE SERVIDOR ---
