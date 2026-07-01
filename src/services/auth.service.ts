@@ -172,7 +172,7 @@ export class AuthService {
             throw new AppError('La sesión de Google ha expirado o es inválida.', 401);
         }
 
-        const { uid: firebaseUid, email, name, picture } = decodedToken;
+        const { uid: firebaseUid, email, name } = decodedToken;
 
         let user = await UserRepository.findByFirebaseUid(firebaseUid);
 
@@ -222,7 +222,7 @@ export class AuthService {
 
         const updated = await UserRepository.update(user.id!, {
             password: hashedPassword,
-        } as any);
+        });
 
         return updated;
     }
@@ -247,7 +247,7 @@ export class AuthService {
         const updated = await UserRepository.update(user.id!, {
             rol: UserRole.USUARIO,
             password: hashedPassword,
-        } as any);
+        });
 
         if (!updated) {
             throw new AppError('Error al actualizar el usuario.', 500);
