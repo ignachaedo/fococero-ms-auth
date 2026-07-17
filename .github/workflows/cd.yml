@@ -88,8 +88,10 @@ jobs:
                   kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
             - name: Crear secreto de entorno
+              env:
+                  FB_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
               run: |
-                  printf '%s\n' "${{ secrets.FIREBASE_PRIVATE_KEY }}" | sed -e 's/\\n/\n/g' > /tmp/firebase-key.pem
+                  echo "$FB_KEY" > /tmp/firebase-key.pem
                   kubectl create secret generic fococero-env \
                     --from-literal=DB_USER="${{ secrets.DB_USER }}" \
                     --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
