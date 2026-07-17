@@ -87,22 +87,21 @@ jobs:
         run: |
           kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Crear secreto de base de datos
-        run: |
-          kubectl create secret generic ms-auth-secrets \
-            --from-literal=DB_USER="${{ secrets.DB_USER }}" \
-            --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-            --from-literal=INTERNAL_SECRET_TOKEN="${{ secrets.INTERNAL_SECRET_TOKEN }}" \
-            -n "${{ env.K8S_NAMESPACE }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Crear secreto de Firebase
+      - name: Crear secreto de entorno
         run: |
           printf '%s' "${{ secrets.FIREBASE_PRIVATE_KEY }}" > /tmp/firebase-key.pem
-          kubectl create secret generic firebase-secret \
+          kubectl create secret generic fococero-env \
+            --from-literal=DB_USER="${{ secrets.DB_USER }}" \
+            --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            --from-literal=DB_HOST="${{ secrets.DB_HOST }}" \
+            --from-literal=DB_PORT="${{ secrets.DB_PORT || '5432' }}" \
             --from-literal=FIREBASE_PROJECT_ID="${{ secrets.FIREBASE_PROJECT_ID }}" \
             --from-literal=FIREBASE_CLIENT_EMAIL="${{ secrets.FIREBASE_CLIENT_EMAIL }}" \
             --from-file=FIREBASE_PRIVATE_KEY=/tmp/firebase-key.pem \
+            --from-literal=INTERNAL_SECRET_TOKEN="${{ secrets.INTERNAL_SECRET_TOKEN }}" \
+            --from-literal=EUREKA_HOST="${{ secrets.EUREKA_HOST || 'eureka' }}" \
+            --from-literal=API_GATEWAY_URL="${{ secrets.API_GATEWAY_URL || 'http://api-gateway:3000' }}" \
+            --from-literal=NODE_ENV=production \
             -n "${{ env.K8S_NAMESPACE }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
