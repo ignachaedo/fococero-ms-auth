@@ -1,4 +1,4 @@
-name: CD - Deploy ms-auth to EKS
+name: CD - Desplegar ms-auth en EKS
 on:
   push:
     branches: ["main"]
@@ -9,29 +9,29 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: fococero-ms-auth
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   K8S_NAMESPACE: fococero
   K8S_DEPLOYMENT: ms-auth
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  construir-y-verificar:
+    name: Construir y Verificar
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
+      - name: Configurar Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Instalar dependencias
         run: npm ci
 
-      - name: Run Tests with Coverage
+      - name: Ejecutar pruebas con cobertura
         run: npm test -- --coverage
         env:
           NODE_ENV: test
@@ -48,18 +48,18 @@ jobs:
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL || 'test@test.com' }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY || 'test-key' }}
 
-      - name: Build Project
+      - name: Compilar proyecto
         run: npm run build
 
-  deploy:
-    name: Deploy to EKS
-    needs: build-and-test
+  desplegar:
+    name: Desplegar en EKS
+    needs: construir-y-verificar
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -67,11 +67,11 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Iniciar sesion en Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Docker image
+      - name: Construir y publicar imagen Docker
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -79,15 +79,34 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Update Kubeconfig
+      - name: Actualizar kubeconfig
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
-      - name: Apply namespace
+      - name: Aplicar namespace
         run: |
           kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy to EKS
+      - name: Crear secreto de base de datos
+        run: |
+          kubectl create secret generic ms-auth-secrets \
+            --from-literal=DB_USER="${{ secrets.DB_USER }}" \
+            --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            --from-literal=INTERNAL_SECRET_TOKEN="${{ secrets.INTERNAL_SECRET_TOKEN }}" \
+            -n "${{ env.K8S_NAMESPACE }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Crear secreto de Firebase
+        run: |
+          printf '%s' "${{ secrets.FIREBASE_PRIVATE_KEY }}" > /tmp/firebase-key.pem
+          kubectl create secret generic firebase-secret \
+            --from-literal=FIREBASE_PROJECT_ID="${{ secrets.FIREBASE_PROJECT_ID }}" \
+            --from-literal=FIREBASE_CLIENT_EMAIL="${{ secrets.FIREBASE_CLIENT_EMAIL }}" \
+            --from-file=FIREBASE_PRIVATE_KEY=/tmp/firebase-key.pem \
+            -n "${{ env.K8S_NAMESPACE }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Desplegar en EKS
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
@@ -96,6 +115,6 @@ jobs:
           kubectl apply -f k8s/service.yaml
           kubectl apply -f k8s/hpa.yaml
 
-      - name: Verify rollout
+      - name: Verificar despliegue
         run: |
           kubectl rollout status deployment/$K8S_DEPLOYMENT -n $K8S_NAMESPACE --timeout=180s
