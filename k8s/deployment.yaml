@@ -25,7 +25,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: ms-auth
-          image: 486507079259.dkr.ecr.us-east-1.amazonaws.com/fococero-ms-auth:${IMAGE_TAG}
+          image: 663719127850.dkr.ecr.us-east-1.amazonaws.com/fococero-ms-auth:${IMAGE_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 3001
