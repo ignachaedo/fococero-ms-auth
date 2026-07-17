@@ -1,119 +1,119 @@
 name: CD - Desplegar ms-auth en EKS
 on:
-  push:
-    branches: ["main"]
+    push:
+        branches: ['main']
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
-  K8S_NAMESPACE: fococero
-  K8S_DEPLOYMENT: ms-auth
+    AWS_REGION: us-east-1
+    ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+    EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+    K8S_NAMESPACE: fococero
+    K8S_DEPLOYMENT: ms-auth
 
 jobs:
-  construir-y-verificar:
-    name: Construir y Verificar
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v4
+    construir-y-verificar:
+        name: Construir y Verificar
+        runs-on: ubuntu-latest
+        steps:
+            - name: Clonar repositorio
+              uses: actions/checkout@v4
 
-      - name: Configurar Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
+            - name: Configurar Node.js 22
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  cache: 'npm'
 
-      - name: Instalar dependencias
-        run: npm ci
+            - name: Instalar dependencias
+              run: npm ci
 
-      - name: Ejecutar pruebas con cobertura
-        run: npm test -- --coverage
-        env:
-          NODE_ENV: test
-          PORT: 3001
-          DB_USER: test
-          DB_PASSWORD: test
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: auth_db
-          EUREKA_HOST: localhost
-          API_GATEWAY_URL: http://localhost:3000
-          INTERNAL_SECRET_TOKEN: test-token
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || 'test-project' }}
-          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL || 'test@test.com' }}
-          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY || 'test-key' }}
+            - name: Ejecutar pruebas con cobertura
+              run: npm test -- --coverage
+              env:
+                  NODE_ENV: test
+                  PORT: 3001
+                  DB_USER: test
+                  DB_PASSWORD: test
+                  DB_HOST: localhost
+                  DB_PORT: 5432
+                  DB_NAME: auth_db
+                  EUREKA_HOST: localhost
+                  API_GATEWAY_URL: http://localhost:3000
+                  INTERNAL_SECRET_TOKEN: test-token
+                  FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || 'test-project' }}
+                  FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL || 'test@test.com' }}
+                  FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY || 'test-key' }}
 
-      - name: Compilar proyecto
-        run: npm run build
+            - name: Compilar proyecto
+              run: npm run build
 
-  desplegar:
-    name: Desplegar en EKS
-    needs: construir-y-verificar
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v4
+    desplegar:
+        name: Desplegar en EKS
+        needs: construir-y-verificar
+        runs-on: ubuntu-latest
+        steps:
+            - name: Clonar repositorio
+              uses: actions/checkout@v4
 
-      - name: Configurar credenciales AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+            - name: Configurar credenciales AWS
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+                  aws-region: ${{ env.AWS_REGION }}
 
-      - name: Iniciar sesion en Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+            - name: Iniciar sesion en Amazon ECR
+              id: login-ecr
+              uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Construir y publicar imagen Docker
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            - name: Construir y publicar imagen Docker
+              env:
+                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                  IMAGE_TAG: ${{ github.sha }}
+              run: |
+                  docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+                  docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Actualizar kubeconfig
-        run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+            - name: Actualizar kubeconfig
+              run: |
+                  aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
-      - name: Aplicar namespace
-        run: |
-          kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+            - name: Aplicar namespace
+              run: |
+                  kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Crear secreto de entorno
-        run: |
-          printf '%s' "${{ secrets.FIREBASE_PRIVATE_KEY }}" > /tmp/firebase-key.pem
-          kubectl create secret generic fococero-env \
-            --from-literal=DB_USER="${{ secrets.DB_USER }}" \
-            --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-            --from-literal=DB_HOST="${{ secrets.DB_HOST }}" \
-            --from-literal=DB_PORT="${{ secrets.DB_PORT || '5432' }}" \
-            --from-literal=FIREBASE_PROJECT_ID="${{ secrets.FIREBASE_PROJECT_ID }}" \
-            --from-literal=FIREBASE_CLIENT_EMAIL="${{ secrets.FIREBASE_CLIENT_EMAIL }}" \
-            --from-file=FIREBASE_PRIVATE_KEY=/tmp/firebase-key.pem \
-            --from-literal=INTERNAL_SECRET_TOKEN="${{ secrets.INTERNAL_SECRET_TOKEN }}" \
-            --from-literal=EUREKA_HOST="${{ secrets.EUREKA_HOST || 'eureka' }}" \
-            --from-literal=API_GATEWAY_URL="${{ secrets.API_GATEWAY_URL || 'http://api-gateway:3000' }}" \
-            --from-literal=NODE_ENV=production \
-            -n "${{ env.K8S_NAMESPACE }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+            - name: Crear secreto de entorno
+              run: |
+                  printf '%s' "${{ secrets.FIREBASE_PRIVATE_KEY }}" > /tmp/firebase-key.pem
+                  kubectl create secret generic fococero-env \
+                    --from-literal=DB_USER="${{ secrets.DB_USER }}" \
+                    --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+                    --from-literal=DB_HOST="${{ secrets.DB_HOST }}" \
+                    --from-literal=DB_PORT="${{ secrets.DB_PORT || '5432' }}" \
+                    --from-literal=FIREBASE_PROJECT_ID="${{ secrets.FIREBASE_PROJECT_ID }}" \
+                    --from-literal=FIREBASE_CLIENT_EMAIL="${{ secrets.FIREBASE_CLIENT_EMAIL }}" \
+                    --from-file=FIREBASE_PRIVATE_KEY=/tmp/firebase-key.pem \
+                    --from-literal=INTERNAL_SECRET_TOKEN="${{ secrets.INTERNAL_SECRET_TOKEN }}" \
+                    --from-literal=EUREKA_HOST="${{ secrets.EUREKA_HOST || 'eureka' }}" \
+                    --from-literal=API_GATEWAY_URL="${{ secrets.API_GATEWAY_URL || 'http://api-gateway:3000' }}" \
+                    --from-literal=NODE_ENV=production \
+                    -n "${{ env.K8S_NAMESPACE }}" \
+                    --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Desplegar en EKS
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          sed -i "s|\${IMAGE_TAG}|$IMAGE_TAG|g" k8s/deployment.yaml
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
-          kubectl apply -f k8s/hpa.yaml
+            - name: Desplegar en EKS
+              env:
+                  IMAGE_TAG: ${{ github.sha }}
+              run: |
+                  sed -i "s|\${IMAGE_TAG}|$IMAGE_TAG|g" k8s/deployment.yaml
+                  kubectl apply -f k8s/deployment.yaml
+                  kubectl apply -f k8s/service.yaml
+                  kubectl apply -f k8s/hpa.yaml
 
-      - name: Verificar despliegue
-        run: |
-          kubectl rollout status deployment/$K8S_DEPLOYMENT -n $K8S_NAMESPACE --timeout=180s
+            - name: Verificar despliegue
+              run: |
+                  kubectl rollout status deployment/$K8S_DEPLOYMENT -n $K8S_NAMESPACE --timeout=180s
